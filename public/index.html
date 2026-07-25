@@ -1,0 +1,61 @@
+nn
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ULJHAN AI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="main-container">
+        <!-- Header -->
+        <header class="header-container">
+            <button class="menu-button">☰</button>
+            <div class="model-selector">
+                <span>ULJHAN AI</span>
+                <span class="dropdown-icon">▼</span>
+            </div>
+            <button class="new-chat-button" id="new-chat-btn">✏️</button>
+        </header>
+
+        <!-- Main Chat Area -->
+        <main class="home-container" id="chat-container">
+            <div class="welcome-container" id="welcome-screen">
+                <div class="ai-star-logo">✦</div>
+                <h1 class="welcome-title">Welcome</h1>
+                <p class="welcome-text">Your Personal AI Assistant</p>
+            </div>
+            <div class="content-container" id="messages-list"></div>
+        </main>
+
+        <!-- Bottom Input Wrapper with Attachments Popup & Preview -->
+        <footer class="input-wrapper">
+            <!-- Attachment Menu Popup -->
+            <div class="attachment-popup" id="attachment-popup" style="display: none;">
+                <button class="popup-option" id="btn-photo"><span>📷</span> Photo</button>
+                <button class="popup-option" id="btn-video"><span>🎥</span> Video</button>
+                <button class="popup-option" id="btn-doc"><span>📄</span> Document</button>
+            </div>
+
+            <!-- Media Preview Box -->
+            <div class="media-preview-container" id="media-preview" style="display: none;">
+                <span id="preview-text">File attached</span>
+                <button id="remove-media">✕</button>
+            </div>
+
+            <div class="input-container">
+                <button class="attach-btn" id="attach-toggle-btn">+</button>
+                <textarea id="user-input" class="chat-input" placeholder="Ask ULJHAN AI..." rows="1"></textarea>
+                <button class="action-btn" id="mic-btn" title="Voice Input">🎙️</button>
+                <button class="action-btn send-btn" id="send-btn" title="Send">⚡</button>
+            </div>
+            <div class="safe-area-container"></div>
+        </footer>
+    </div>
+
+    <!-- Hidden File Input for Photos/Videos/Docs -->
+    <input type="file" id="hidden-file-input" style="display: none;">
+
+    <script src="app.js"></script>
+</body>
+</html>
