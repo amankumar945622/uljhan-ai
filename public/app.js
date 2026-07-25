@@ -3,173 +3,187 @@ document.addEventListener('DOMContentLoaded', () => {
     const userInput = document.getElementById('user-input');
     const welcomeScreen = document.getElementById('welcome-screen');
     const messagesList = document.getElementById('messages-list');
-    const chatContainer = document.getElementById('chat-container');
     const attachToggleBtn = document.getElementById('attach-toggle-btn');
     const attachmentPopup = document.getElementById('attachment-popup');
     const hiddenFileInput = document.getElementById('hidden-file-input');
     const mediaPreview = document.getElementById('media-preview');
     const previewText = document.getElementById('preview-text');
     const removeMedia = document.getElementById('remove-media');
-    const micBtn = document.getElementById('mic-btn');
-    const newChatBtn = document.getElementById('new-chat-btn');
+    const menuToggleBtn = document.getElementById('menu-toggle-btn');
+    const sidebarMenu = document.getElementById('sidebar-menu');
+    const clearHistoryOption = document.getElementById('clear-history-option');
 
-    let attachedFile = null;
+    let attachedImageBase64 = null;
 
-    // 1. Textarea Auto-Height Logic
-    if (userInput) {
-        userInput.addEventListener('input', () => {
-            userInput.style.height = 'auto';
-            userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+    async function loadChatHistory() {
+        try {
+            const res = await fetch('/api/history');
+            const history = await res.json();
+            messagesList.innerHTML = '';
+            if (history && history.length > 0) {
+                if (welcomeScreen) welcomeScreen.style.display = 'none';
+                history.forEach(msg => {
+                    const text = msg.parts && msg.parts[0] ? (msg.parts[0].text || "[Image Attached]") : '';
+                    appendMessage(msg.role === 'user' ? 'user' : 'ai', text);
+                });
+            }
+        } catch (e) {
+            console.error("Failed to load history", e);
+        }
+    }
+
+    loadChatHistory();
+
+    // Menu Toggle for History Option
+    if (menuToggleBtn && sidebarMenu) {
+        menuToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebarMenu.style.display = sidebarMenu.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', () => {
+            sidebarMenu.style.display = 'none';
         });
     }
 
-    // 2. Attachment Popup Toggle
-    if (attachToggleBtn) {
-        attachToggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (attachmentPopup.style.display === 'none') {
-                attachmentPopup.style.display = 'flex';
-            } else {
-                attachmentPopup.style.display = 'none';
+    // Clear History Logic
+    if (clearHistoryOption) {
+        clearHistoryOption.addEventListener('click', async () => {
+            if (confirm("Kya aap saari chat history clear karna chahte hain?")) {
+                try {
+                    const res = await fetch('/api/clear', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) {
+                        messagesList.innerHTML = '';
+                        if (welcomeScreen) welcomeScreen.style.display = 'flex';
+                    }
+                } catch (e) {
+                    console.error("Failed to clear history", e);
+                }
             }
         });
     }
 
-    // Hide popup on outside click
+    // Attachment Popup Toggle
+    if (attachToggleBtn) {
+        attachToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            attachmentPopup.style.display = attachmentPopup.style.display === 'none' ? 'flex' : 'none';
+        });
+    }
+
     document.addEventListener('click', () => {
         if (attachmentPopup) attachmentPopup.style.display = 'none';
     });
 
-    // 3. Media Selection Options
     document.getElementById('btn-photo').addEventListener('click', () => {
-        hiddenFileInput.accept = 'image/*';
-        hiddenFileInput.click();
-    });
-
-    document.getElementById('btn-video').addEventListener('click', () => {
-        hiddenFileInput.accept = 'video/*';
-        hiddenFileInput.click();
-    });
-
-    document.getElementById('btn-doc').addEventListener('click', () => {
-        hiddenFileInput.accept = '.pdf,.txt,.doc,.docx';
         hiddenFileInput.click();
     });
 
     hiddenFileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
-            attachedFile = file;
-            previewText.innerText = `📎 ${file.name}`;
-            mediaPreview.style.display = 'flex';
+            const reader = new FileReader();
+            reader.onload = function(uploadEvent) {
+                attachedImageBase64 = uploadEvent.target.result;
+                previewText.innerText = `📷 ${file.name}`;
+                mediaPreview.style.display = 'flex';
+            };
+            reader.readAsDataURL(file);
         }
     });
 
     removeMedia.addEventListener('click', () => {
-        attachedFile = null;
-        hiddenFileInput.value = '';
+        attachedImageBase64 = null;
         mediaPreview.style.display = 'none';
+        hiddenFileInput.value = '';
     });
 
-    // 4. Mic Button Click Simulation
-    if (micBtn) {
-        micBtn.addEventListener('click', () => {
-            alert("🎤 Voice recording feature ready!");
-        });
+    function appendMessage(sender, text) {
+        if (welcomeScreen) welcomeScreen.style.display = 'none';
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = sender === 'user' ? 'user-message-container' : 'ai-message-container';
+        
+        let actionButtons = '';
+        if (sender === 'ai') {
+            actionButtons = `
+                <div style="margin-top: 6px; display: flex; gap: 10px; font-size: 14px;">
+                    <button class="copy-btn" style="background:none; border:none; cursor:pointer;" title="Copy">📋 Copy</button>
+                    <button class="speak-btn" style="background:none; border:none; cursor:pointer;" title="Speak">🔊 Listen</button>
+                </div>
+            `;
+        }
+
+        messageDiv.innerHTML = `
+            <div class="message-bubble" style="padding: 10px 14px; margin: 8px 0; border-radius: 12px; max-width: 80%; word-break: break-word; ${sender === 'user' ? 'background: #dbeafe; margin-left: auto;' : 'background: #ffffff; border: 1px solid #e5e7eb; margin-right: auto;'}">
+                <p style="margin: 0; font-size: 15px; color: #1f2937; white-space: pre-wrap;">${text}</p>
+                ${actionButtons}
+            </div>
+        `;
+
+        if (sender === 'ai') {
+            const copyBtn = messageDiv.querySelector('.copy-btn');
+            const speakBtn = messageDiv.querySelector('.speak-btn');
+
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(text);
+                alert("Text copied!");
+            });
+
+            speakBtn.addEventListener('click', () => {
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'hi-IN';
+                window.speechSynthesis.speak(utterance);
+            });
+        }
+        
+        messagesList.appendChild(messageDiv);
+        messagesList.scrollTop = messagesList.scrollHeight;
     }
 
-    // 5. New Chat Button Refresh
-    if (newChatBtn) {
-        newChatBtn.addEventListener('click', () => {
-            messagesList.innerHTML = '';
-            if (welcomeScreen) welcomeScreen.style.display = 'block';
-        });
-    }
-
-    // 6. Message Send Function
-    function sendMessage() {
+    async function handleSendMessage() {
         const text = userInput.value.trim();
-        if (!text && !attachedFile) return;
+        if (!text && !attachedImageBase64) return;
 
-        if (welcomeScreen) {
-            welcomeScreen.style.display = 'none';
-        }
+        const messageText = text;
+        const imagePayload = attachedImageBase64;
 
-        let fullText = text;
-        if (attachedFile) {
-            fullText += `\n[Attached: ${attachedFile.name}]`;
-        }
-
-        appendMessage(fullText, 'user');
-
-        // Reset inputs
         userInput.value = '';
-        userInput.style.height = '28px';
-        attachedFile = null;
+        userInput.style.height = 'auto';
+        attachedImageBase64 = null;
         mediaPreview.style.display = 'none';
         hiddenFileInput.value = '';
 
-        // AI Demo Response with Speaker & Copy buttons
-        setTimeout(() => {
-            appendMessage(`Main ULJHAN AI hoon! Aapne kaha: "${text || 'Media file'}"`, 'bot');
-        }, 500);
-    }
+        appendMessage('user', messageText + (imagePayload ? " [Image Attached]" : ""));
 
-    function appendMessage(text, sender) {
-        const wrapper = document.createElement('div');
-        wrapper.className = `message-wrapper ${sender}`;
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: messageText, image: imagePayload })
+            });
 
-        const msgBubble = document.createElement('div');
-        msgBubble.className = 'msg-bubble';
-        msgBubble.innerText = text;
-        wrapper.appendChild(msgBubble);
-
-        // Add Action buttons (Copy & Speaker for Bot / Copy for User)
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'msg-actions';
-
-        // Copy Button
-        const copyBtn = document.createElement('button');
-        copyBtn.className = 'msg-action-btn';
-        copyBtn.innerText = '📋 Copy';
-        copyBtn.onclick = () => {
-            navigator.clipboard.writeText(text);
-            copyBtn.innerText = '✓ Copied';
-            setTimeout(() => copyBtn.innerText = '📋 Copy', 2000);
-        };
-        actionsDiv.appendChild(copyBtn);
-
-        // Speaker Button (Only for Bot)
-        if (sender === 'bot' && 'speechSynthesis' in window) {
-            const speakBtn = document.createElement('button');
-            speakBtn.className = 'msg-action-btn';
-            speakBtn.innerText = '🔊 Listen';
-            speakBtn.onclick = () => {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                window.speechSynthesis.speak(utterance);
-            };
-            actionsDiv.appendChild(speakBtn);
+            const data = await response.json();
+            if (data.reply) {
+                appendMessage('ai', data.reply);
+            } else if (data.error) {
+                appendMessage('ai', `Error: ${data.error}`);
+            }
+        } catch (error) {
+            console.error("Network Error:", error);
+            appendMessage('ai', "Server se connect karne mein pareshani aa rahi hai.");
         }
-
-        wrapper.appendChild(actionsDiv);
-        messagesList.appendChild(wrapper);
-
-        chatContainer.scrollTo({
-            top: chatContainer.scrollHeight,
-            behavior: 'smooth'
-        });
     }
 
     if (sendBtn) {
-        sendBtn.addEventListener('click', sendMessage);
+        sendBtn.addEventListener('click', handleSendMessage);
     }
 
     if (userInput) {
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                sendMessage();
+                handleSendMessage();
             }
         });
     }

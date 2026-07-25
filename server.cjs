@@ -1,58 +1,146 @@
-const express = require('express');
+const http = require('http');
+const fs = require('fs');
 const path = require('path');
+const { GoogleGenAI } = require('@google/genai');
 
-const app = express();
-const PORT = process.env.PORT || 8080;
+const ai = new GoogleGenAI({ apiKey: "AQ.Ab8RN6KxMhbDeVFGgowVCv_TBebwP9qRnFZKYwdbgBpbJtvSZw" });
 
-app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+const HISTORY_FILE = path.join(__dirname, 'chat_history.json');
 
-// Google Server API Key (Yahan apni Google Gemini API Key dalein)
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || 'YAHAN_APNI_GOOGLE_API_KEY_DALEN';
-
-app.post('/api/chat', async (req, res) => {
-    const userMessage = req.body.message;
-    console.log("User ka message aaya:", userMessage);
-
+function loadHistory() {
     try {
-        if (GOOGLE_API_KEY === 'YAHAN_APNI_GOOGLE_API_KEY_DALEN') {
-            return res.json({ 
-                reply: "Google Server Error: Kripya server.cjs mein apni valid Google API Key set karein." 
-            });
+        if (fs.existsSync(HISTORY_FILE)) {
+            const data = fs.readFileSync(HISTORY_FILE, 'utf8');
+            return JSON.parse(data);
         }
-
-        // Seedha Google ke official server par request bhej rahe hain
-        const fetch = (await import('node-fetch')).default;
-        const googleResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GOOGLE_API_KEY}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{ text: userMessage }]
-                }]
-            })
-        });
-
-        const data = await googleResponse.json();
-
-        // Google server ke response se text nikalna
-        let googleReply = "Google server se koi response nahi mila.";
-        if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-            googleReply = data.candidates[0].content.parts[0].text;
-        } else if (data.error) {
-            googleReply = `Google Server Error: ${data.error.message}`;
-        }
-
-        res.json({ reply: googleReply });
-
-    } catch (error) {
-        console.error("Connection Error:", error);
-        res.json({ reply: "Google server se connect hone mein samasya aa rahi hai." });
+    } catch (e) {
+        console.error("Error loading history", e);
     }
+    return [];
+}
+
+function saveHistory(history) {
+    try {
+        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+    } catch (e) {
+        console.error("Error saving history", e);
+    }
+}
+
+let chatHistory = loadHistory();
+
+const server = http.createServer(async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+    }
+
+    if (req.url === '/api/history' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(chatHistory));
+        return;
+    }
+
+    if (req.url === '/api/clear' && req.method === 'POST') {
+        chatHistory = [];
+        saveHistory(chatHistory);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+        return;
+    }
+
+    if (req.url === '/api/chat' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            try {
+                const parsed = JSON.parse(body);
+                const userMessage = parsed.message;
+                const imageBase64 = parsed.image;
+
+                if (!userMessage && !imageBase64) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: 'Message or image is required' }));
+                    return;
+                }
+
+                let contentParts = [];
+                if (userMessage) {
+                    contentParts.push({ text: userMessage });
+                }
+
+                if (imageBase64) {
+                    const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                    if (matches && matches.length === 3) {
+                        contentParts.push({
+                            inlineData: {
+                                mimeType: matches[1],
+                                data: matches[2]
+                            }
+                        });
+                    }
+                }
+
+                chatHistory.push({ role: 'user', parts: contentParts });
+
+                const response = await ai.models.generateContent({
+                   model: 'gemini-1.5-flash'
+                    contents: chatHistory,
+                });
+
+                const aiReply = response.text || "No response from AI";
+
+                chatHistory.push({ role: 'model', parts: [{ text: aiReply }] });
+                saveHistory(chatHistory);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ reply: aiReply, history: chatHistory }));
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: error.message }));
+            }
+        });
+        return;
+    }
+
+    let filePath = path.join(__dirname, 'public', req.url === '/' ? 'index.html' : req.url);
+    let extname = String(path.extname(filePath)).toLowerCase();
+    let mimeTypes = {
+        '.html': 'text/html',
+        '.js': 'text/javascript',
+        '.css': 'text/css',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpg',
+    };
+
+    let contentType = mimeTypes[extname] || 'application/octet-stream';
+
+    fs.readFile(filePath, (error, content) => {
+        if (error) {
+            if(error.code == 'ENOENT') {
+                fs.readFile(path.join(__dirname, 'public', 'index.html'), (err, content) => {
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(content, 'utf-8');
+                });
+            } else {
+                res.writeHead(500);
+                res.end('Server error: '+error.code);
+            }
+        } else {
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(content, 'utf-8');
+        }
+    });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Pure Google Connected Server is running on port ${PORT}`);
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
