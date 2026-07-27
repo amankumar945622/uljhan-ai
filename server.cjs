@@ -13,32 +13,24 @@ app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 const PORT = process.env.PORT || 3000;
 const HISTORY_FILE = path.join(__dirname, 'chat_history.json');
 
-// Initialize Gemini API
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Load History
 function loadHistory() {
     try {
         if (fs.existsSync(HISTORY_FILE)) {
             return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
         }
-    } catch (e) {
-        console.error("Error loading history", e);
-    }
+    } catch (e) { console.error(e); }
     return [];
 }
 
-// Save History
 function saveHistory(history) {
     try {
         fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
-    } catch (e) {
-        console.error("Error saving history", e);
-    }
+    } catch (e) { console.error(e); }
 }
 
 let chatHistoryLog = loadHistory();
-
 app.use(express.static(__dirname));
 
 app.get('/api/history', (req, res) => {
@@ -50,40 +42,36 @@ app.post('/api/chat', async (req, res) => {
         const { message, media } = req.body;
         chatHistoryLog.push({ role: 'user', text: message, media: media });
 
-        let contents = message;
+        let contents = message || "Analyze this file";
         if (media) {
             const base64Data = media.split(';base64,').pop();
             const mimeType = media.split(';')[0].split(':')[1];
             contents = [
                 { inlineData: { data: base64Data, mimeType: mimeType } },
-                message || "Describe or analyze this file."
+                message || "Describe this media."
             ];
         }
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-1.5-flash',
             contents: contents,
         });
 
-        const replyText = response.text || "Mujhe samajh nahi aaya, kripya dobara puchein.";
+        const replyText = response.text || "Mujhe samajh nahi aaya.";
         chatHistoryLog.push({ role: 'bot', text: replyText });
         saveHistory(chatHistoryLog);
 
         res.json({ reply: replyText });
     } catch (error) {
         console.error("Gemini Error:", error);
-        res.status(500).json({ reply: "Server error, kripya API key ya network check karein." });
+        res.status(500).json({ reply: "Server error, kripya API key check karein." });
     }
 });
 
 app.post('/api/clear', (req, res) => {
     chatHistoryLog = [];
-    if (fs.existsSync(HISTORY_FILE)) {
-        fs.unlinkSync(HISTORY_FILE);
-    }
+    if (fs.existsSync(HISTORY_FILE)) fs.unlinkSync(HISTORY_FILE);
     res.json({ success: true });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
