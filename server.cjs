@@ -126,7 +126,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Serve static frontend files (HTML, CSS, JS)
-    let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url);
+    let filePath = path.join(__dirname, req.url === '/' ? 'public/index.html' : path.join('public', req.url));
     let extname = path.extname(filePath);
     let contentType = 'text/html';
     
