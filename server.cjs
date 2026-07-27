@@ -4,30 +4,31 @@ const path = require('path');
 const { GoogleGenAI } = require('@google/genai');
 
 const ai = new GoogleGenAI({ apiKey: "AQ.Ab8RN6KxMhbDeVFGgowVCv_TBebwP9qRnFZKYwdbgBpbJtvSZw" });
+const MODEL_NAME = 'gemini-1.5-flash';
 
 const HISTORY_FILE = path.join(__dirname, 'chat_history.json');
+const ARCHIVE_FILE = path.join(__dirname, 'saved_chats.json');
 
-function loadHistory() {
+function loadFile(file) {
     try {
-        if (fs.existsSync(HISTORY_FILE)) {
-            const data = fs.readFileSync(HISTORY_FILE, 'utf8');
-            return JSON.parse(data);
+        if (fs.existsSync(file)) {
+            return JSON.parse(fs.readFileSync(file, 'utf8'));
         }
     } catch (e) {
-        console.error("Error loading history", e);
+        console.error("Error loading file", e);
     }
     return [];
 }
 
-function saveHistory(history) {
+function saveFile(file, data) {
     try {
-        fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+        fs.writeFileSync(file, JSON.stringify(data, null, 2));
     } catch (e) {
-        console.error("Error saving history", e);
+        console.error("Error saving file", e);
     }
 }
 
-let chatHistory = loadHistory();
+let chatHistory = loadFile(HISTORY_FILE);
 
 const server = http.createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -40,20 +41,49 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // Get active chat history
     if (req.url === '/api/history' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(chatHistory));
         return;
     }
 
+    // Get saved archive history
+    if (req.url === '/api/saved-history' && req.method === 'GET') {
+        const archives = loadFile(ARCHIVE_FILE);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(archives));
+        return;
+    }
+
+    // Save current session to permanent archive
+    if (req.url === '/api/save-session' && req.method === 'POST') {
+        if (chatHistory.length > 0) {
+            let archives = loadFile(ARCHIVE_FILE);
+            archives.push({
+                id: Date.now(),
+                date: new Date().toLocaleString(),
+                chats: chatHistory
+            });
+            saveFile(ARCHIVE_FILE, archives);
+            chatHistory = [];
+            saveFile(HISTORY_FILE, chatHistory);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Session saved successfully' }));
+        return;
+    }
+
+    // Clear history manually
     if (req.url === '/api/clear' && req.method === 'POST') {
         chatHistory = [];
-        saveHistory(chatHistory);
+        saveFile(HISTORY_FILE, chatHistory);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
         return;
     }
 
+    // Handle chat message request
     if (req.url === '/api/chat' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => { body += chunk; });
@@ -61,78 +91,53 @@ const server = http.createServer(async (req, res) => {
             try {
                 const parsed = JSON.parse(body);
                 const userMessage = parsed.message;
-                const imageBase64 = parsed.image;
 
-                if (!userMessage && !imageBase64) {
+                if (!userMessage) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: 'Message or image is required' }));
+                    res.end(JSON.stringify({ error: 'Message is required' }));
                     return;
                 }
 
-                let contentParts = [];
-                if (userMessage) {
-                    contentParts.push({ text: userMessage });
-                }
-
-                if (imageBase64) {
-                    const matches = imageBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-                    if (matches && matches.length === 3) {
-                        contentParts.push({
-                            inlineData: {
-                                mimeType: matches[1],
-                                data: matches[2]
-                            }
-                        });
-                    }
-                }
-
-                chatHistory.push({ role: 'user', parts: contentParts });
-
+                // Call Gemini API with natural response instructions
                 const response = await ai.models.generateContent({
-                   model: 'gemini-1.5-flash'
-                    contents: chatHistory,
+                    model: MODEL_NAME,
+                    contents: userMessage,
+                    config: {
+                        systemInstruction: "You are ULJHAN AI, a personal AI assistant. Reply naturally, intelligently, and directly like a human friend in chat. Do not unnecessarily repeat your name or say 'You said: ...'. Keep answers concise, accurate, and fast."
+                    }
                 });
 
-                const aiReply = response.text || "No response from AI";
+                const botReply = response.text || "Mujhe samajh nahi aaya, kripya dobara kahein.";
+                const timestamp = new Date().toISOString();
 
-                chatHistory.push({ role: 'model', parts: [{ text: aiReply }] });
-                saveHistory(chatHistory);
+                chatHistory.push({ role: 'user', text: userMessage, time: timestamp });
+                chatHistory.push({ role: 'model', text: botReply, time: timestamp });
+                saveFile(HISTORY_FILE, chatHistory);
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ reply: aiReply, history: chatHistory }));
+                res.end(JSON.stringify({ reply: botReply }));
             } catch (error) {
-                console.error("Gemini API Error:", error);
+                console.error('API Error:', error);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: error.message }));
+                res.end(JSON.stringify({ reply: "Server error, kripya thodi der baad koshish karein." }));
             }
         });
         return;
     }
 
-    let filePath = path.join(__dirname, 'public', req.url === '/' ? 'index.html' : req.url);
-    let extname = String(path.extname(filePath)).toLowerCase();
-    let mimeTypes = {
-        '.html': 'text/html',
-        '.js': 'text/javascript',
-        '.css': 'text/css',
-        '.json': 'application/json',
-        '.png': 'image/png',
-        '.jpg': 'image/jpg',
-    };
+    // Serve static frontend files (HTML, CSS, JS)
+    let filePath = path.join(__dirname, req.url === '/' ? 'index.html' : req.url);
+    let extname = path.extname(filePath);
+    let contentType = 'text/html';
+    
+    if (extname === '.js') contentType = 'text/javascript';
+    else if (extname === '.css') contentType = 'text/css';
+    else if (extname === '.json') contentType = 'application/json';
 
-    let contentType = mimeTypes[extname] || 'application/octet-stream';
-
-    fs.readFile(filePath, (error, content) => {
-        if (error) {
-            if(error.code == 'ENOENT') {
-                fs.readFile(path.join(__dirname, 'public', 'index.html'), (err, content) => {
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(content, 'utf-8');
-                });
-            } else {
-                res.writeHead(500);
-                res.end('Server error: '+error.code);
-            }
+    fs.readFile(filePath, (err, content) => {
+        if (err) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('404 Not Found');
         } else {
             res.writeHead(200, { 'Content-Type': contentType });
             res.end(content, 'utf-8');
@@ -140,7 +145,7 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server is running on port ${PORT}`);
 });

@@ -1,1 +1,4 @@
-git add . && git commit -m "Auto update code" && git push
+#!/bin/bash
+git add .
+git commit -m "Auto update: $(date)"
+git push
