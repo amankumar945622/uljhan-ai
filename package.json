@@ -1,12 +1,11 @@
-nano package.json
 {
-  "name": "myproject",
+  "name": "uljhan-ai",
   "version": "1.0.0",
-  "type": "commonjs",
+  "description": "AI Chat Application",
+  "main": "server.cjs",
   "scripts": {
     "start": "node server.cjs"
   },
-  "dependencies": {
-    "@google/genai": "^2.13.0"
-  }
+  "dependencies": {}
 }
+
