@@ -139,7 +139,7 @@ const server = http.createServer(async (req, res) => {
             res.writeHead(404, { 'Content-Type': 'text/plain' });
             res.end('404 Not Found');
         } else {
-            res.writeHead(200, { 'Content-Type': contentType });
+            res.writeHead(200, { 'Content-Type': contqype });
             res.end(content, 'utf-8');
         }
     });

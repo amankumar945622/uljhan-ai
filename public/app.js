@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+ document.addEventListener('DOMContentLoaded', () => {
     const sendBtn = document.getElementById('send-btn');
     const userInput = document.getElementById('user-input');
     const welcomeScreen = document.getElementById('welcome-screen');
