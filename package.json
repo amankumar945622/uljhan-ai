@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.cjs"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@google/genai": "^0.1.1"
+  }
 }
 
