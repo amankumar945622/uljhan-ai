@@ -1,190 +1,138 @@
- document.addEventListener('DOMContentLoaded', () => {
-    const sendBtn = document.getElementById('send-btn');
-    const userInput = document.getElementById('user-input');
-    const welcomeScreen = document.getElementById('welcome-screen');
-    const messagesList = document.getElementById('messages-list');
-    const attachToggleBtn = document.getElementById('attach-toggle-btn');
-    const attachmentPopup = document.getElementById('attachment-popup');
-    const hiddenFileInput = document.getElementById('hidden-file-input');
-    const mediaPreview = document.getElementById('media-preview');
-    const previewText = document.getElementById('preview-text');
-    const removeMedia = document.getElementById('remove-media');
-    const menuToggleBtn = document.getElementById('menu-toggle-btn');
-    const sidebarMenu = document.getElementById('sidebar-menu');
-    const clearHistoryOption = document.getElementById('clear-history-option');
+// --- UI Elements ---
+const chatMessages = document.getElementById('chat-messages');
+const userInput = document.getElementById('user-input');
+const sendButton = document.getElementById('send-button');
+const homeContainer = document.getElementById('home-container');
+const optionButtons = document.querySelectorAll('.option-button');
 
-    let attachedImageBase64 = null;
+// --- Helper Functions ---
 
-    async function loadChatHistory() {
-        try {
-            const res = await fetch('/api/history');
-            const history = await res.json();
-            messagesList.innerHTML = '';
-            if (history && history.length > 0) {
-                if (welcomeScreen) welcomeScreen.style.display = 'none';
-                history.forEach(msg => {
-                    const text = msg.parts && msg.parts[0] ? (msg.parts[0].text || "[Image Attached]") : '';
-                    appendMessage(msg.role === 'user' ? 'user' : 'ai', text);
-                });
-            }
-        } catch (e) {
-            console.error("Failed to load history", e);
-        }
-    }
+// 1. Home screen hide karke chat area dikhata hai
+function showChatUI() {
+    homeContainer.style.display = 'none';
+    chatMessages.style.display = 'flex';
+}
 
-    loadChatHistory();
+// 2. Message HTML banata hai (User ya AI)
+function createMessageElement(text, sender) {
+    const messageDiv = document.createElement('div');
+    messageDiv.classList.add('message', sender);
+    
+    const textP = document.createElement('p');
+    textP.textContent = text;
+    messageDiv.appendChild(textP);
 
-    // Menu Toggle for History Option
-    if (menuToggleBtn && sidebarMenu) {
-        menuToggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            sidebarMenu.style.display = sidebarMenu.style.display === 'none' ? 'block' : 'none';
-        });
-        document.addEventListener('click', () => {
-            sidebarMenu.style.display = 'none';
-        });
-    }
+    // Agar AI message hai, toh niche buttons add karein
+    if (sender === 'ai') {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.classList.add('ai-message-actions');
 
-    // Clear History Logic
-    if (clearHistoryOption) {
-        clearHistoryOption.addEventListener('click', async () => {
-            if (confirm("Kya aap saari chat history clear karna chahte hain?")) {
-                try {
-                    const res = await fetch('/api/clear', { method: 'POST' });
-                    const data = await res.json();
-                    if (data.success) {
-                        messagesList.innerHTML = '';
-                        if (welcomeScreen) welcomeScreen.style.display = 'flex';
-                    }
-                } catch (e) {
-                    console.error("Failed to clear history", e);
-                }
-            }
-        });
-    }
-
-    // Attachment Popup Toggle
-    if (attachToggleBtn) {
-        attachToggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            attachmentPopup.style.display = attachmentPopup.style.display === 'none' ? 'flex' : 'none';
-        });
-    }
-
-    document.addEventListener('click', () => {
-        if (attachmentPopup) attachmentPopup.style.display = 'none';
-    });
-
-    document.getElementById('btn-photo').addEventListener('click', () => {
-        hiddenFileInput.click();
-    });
-
-    hiddenFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(uploadEvent) {
-                attachedImageBase64 = uploadEvent.target.result;
-                previewText.innerText = `📷 ${file.name}`;
-                mediaPreview.style.display = 'flex';
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-
-    removeMedia.addEventListener('click', () => {
-        attachedImageBase64 = null;
-        mediaPreview.style.display = 'none';
-        hiddenFileInput.value = '';
-    });
-
-    function appendMessage(sender, text) {
-        if (welcomeScreen) welcomeScreen.style.display = 'none';
+        const copyBtn = createActionButton('fa-copy', 'Copy Text', () => copyText(text));
+        const speakBtn = createActionButton('fa-volume-up', 'Speak Text', () => speakText(text));
         
-        const messageDiv = document.createElement('div');
-        messageDiv.className = sender === 'user' ? 'user-message-container' : 'ai-message-container';
+        actionsDiv.appendChild(copyBtn);
+        actionsDiv.appendChild(speakBtn);
         
-        let actionButtons = '';
-        if (sender === 'ai') {
-            actionButtons = `
-                <div style="margin-top: 6px; display: flex; gap: 10px; font-size: 14px;">
-                    <button class="copy-btn" style="background:none; border:none; cursor:pointer;" title="Copy">📋 Copy</button>
-                    <button class="speak-btn" style="background:none; border:none; cursor:pointer;" title="Speak">🔊 Listen</button>
-                </div>
-            `;
-        }
-
-        messageDiv.innerHTML = `
-            <div class="message-bubble" style="padding: 10px 14px; margin: 8px 0; border-radius: 12px; max-width: 80%; word-break: break-word; ${sender === 'user' ? 'background: #dbeafe; margin-left: auto;' : 'background: #ffffff; border: 1px solid #e5e7eb; margin-right: auto;'}">
-                <p style="margin: 0; font-size: 15px; color: #1f2937; white-space: pre-wrap;">${text}</p>
-                ${actionButtons}
-            </div>
-        `;
-
-        if (sender === 'ai') {
-            const copyBtn = messageDiv.querySelector('.copy-btn');
-            const speakBtn = messageDiv.querySelector('.speak-btn');
-
-            copyBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(text);
-                alert("Text copied!");
-            });
-
-            speakBtn.addEventListener('click', () => {
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'hi-IN';
-                window.speechSynthesis.speak(utterance);
-            });
-        }
-        
-        messagesList.appendChild(messageDiv);
-        messagesList.scrollTop = messagesList.scrollHeight;
+        messageDiv.appendChild(actionsDiv);
     }
 
-    async function handleSendMessage() {
-        const text = userInput.value.trim();
-        if (!text && !attachedImageBase64) return;
+    return messageDiv;
+}
 
-        const messageText = text;
-        const imagePayload = attachedImageBase64;
+// Helper to create action buttons (Copy/Speaker)
+function createActionButton(iconClass, title, onClick) {
+    const btn = document.createElement('button');
+    btn.classList.add('action-btn');
+    btn.title = title;
+    btn.onclick = onClick;
+    btn.innerHTML = `<i class="fas ${iconClass}"></i>`;
+    return btn;
+}
 
-        userInput.value = '';
-        userInput.style.height = 'auto';
-        attachedImageBase64 = null;
-        mediaPreview.style.display = 'none';
-        hiddenFileInput.value = '';
+// Scroll to bottom
+function scrollToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
-        appendMessage('user', messageText + (imagePayload ? " [Image Attached]" : ""));
+// --- Action Functions ---
 
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: messageText, image: imagePayload })
-            });
+async function handleSendMessage() {
+    const text = userInput.value.trim();
+    if (!text) return;
 
-            const data = await response.json();
-            if (data.reply) {
-                appendMessage('ai', data.reply);
-            } else if (data.error) {
-                appendMessage('ai', `Error: ${data.error}`);
-            }
-        } catch (error) {
-            console.error("Network Error:", error);
-            appendMessage('ai', "Server se connect karne mein pareshani aa rahi hai.");
-        }
-    }
+    // UI Update: Chat dikhayein, input clear karein, disable karein
+    showChatUI();
+    userInput.value = '';
+    sendButton.disabled = true;
 
-    if (sendBtn) {
-        sendBtn.addEventListener('click', handleSendMessage);
-    }
+    // User message add karein
+    chatMessages.appendChild(createMessageElement(text, 'user'));
+    scrollToBottom();
 
-    if (userInput) {
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-            }
+    // Server ko request bhejein
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text }),
         });
+
+        if (!response.ok) throw new Error('Server Error');
+
+        const data = await response.json();
+        const botResponse = data.response || 'No response from AI.';
+        
+        // AI message add karein (buttons ke sath)
+        chatMessages.appendChild(createMessageElement(botResponse, 'ai'));
+        scrollToBottom();
+
+    } catch (error) {
+        console.error('Error:', error);
+        chatMessages.appendChild(createMessageElement('Server error, kripya thodi der baad koshish karein.', 'ai'));
+        scrollToBottom();
+    } finally {
+        sendButton.disabled = false;
+        userInput.focus();
+    }
+}
+
+// --- Utility Functions ---
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Optional: Add a visual cue that text was copied
+        console.log('Text copied to clipboard');
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+    });
+}
+
+function speakText(text) {
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    window.speechSynthesis.speak(utterance);
+}
+
+// --- Event Listeners ---
+
+// Send Button Click
+sendButton.addEventListener('click', handleSendMessage);
+
+// Enter Key in Input
+userInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+        handleSendMessage();
     }
 });
+
+// Clickable options on home screen
+optionButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        const promptText = button.querySelector('span').textContent.trim();
+        userInput.value = promptText;
+        handleSendMessage(); // Auto send the prompt
+    });
+});
+
+// Focus on input on load
+userInput.focus();
